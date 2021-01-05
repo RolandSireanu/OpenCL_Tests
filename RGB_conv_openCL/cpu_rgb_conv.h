@@ -7,13 +7,13 @@ class CpuRgbConv : public RgbConv
 {
     public:
 
-        CpuRgbConv(std::unique_ptr<char[]> arg_buffer, unsigned int arg_length, unsigned int arg_start) 
-            : RgbConv(std::move(arg_buffer), arg_length, arg_start)
+        CpuRgbConv(std::string inputImage) 
+            : RgbConv(inputImage)
         {
 
         }
 
-        std::unique_ptr<char[]> convert_to_rgb() override 
+        void convert_to_rgb(std::string outputImage) override 
         {
             char temp;
             unsigned int boundery = (rgb_length / 3);
@@ -25,7 +25,9 @@ class CpuRgbConv : public RgbConv
                 rgb_buffer[rgb_start+(i*3)+2] = temp;
             }
 
-            return std::move(rgb_buffer);
+            std::ofstream outStream(outputImage, std::ios::out | std::ios::binary);
+            outStream.write(output, rgb_length);
+            outStream.close();
             
         }
 

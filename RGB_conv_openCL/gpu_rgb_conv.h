@@ -2,16 +2,26 @@
 #define GPU_RGB_CONV_H
 
 #include "rgb_converter.h"
+#include "bmpFormat.h"
+#include <memory>
 #include <iostream>
 #include <stdlib.h>
 #include <CL/cl.h>
+#include <stdio.h>
+#include <string.h>
 
 class GpuRgbConv : public RgbConv
 {
 
     public: 
-    GpuRgbConv(std::unique_ptr<char[]> arg, unsigned int length, unsigned int start) : RgbConv(std::move(arg),length,start)
+    GpuRgbConv(std::string inputImage) : RgbConv(inputImage)
     {
+
+    }
+
+    void convert_to_rgb(std::string outputImage) override
+    {
+
         char* source_str = new char[MAX_SOURCE_SIZE];
 
         kp = fopen("kernel_rgb_conv.cl","r");
@@ -41,13 +51,11 @@ class GpuRgbConv : public RgbConv
         checkRet(ret,1);
 
         cl_mem a_mem_obj = clCreateBuffer(context, CL_MEM_READ_WRITE, 
-                length, NULL, &ret);
-        cl_mem r_mem_obj = clCreateBuffer(context, CL_MEM_READ_WRITE, 
-                length, NULL, &ret);
+                rgb_length, NULL, &ret);        
         checkRet(ret,2);
 
         ret = clEnqueueWriteBuffer(cmd_queue, a_mem_obj, CL_TRUE, 0,
-                length, rgb_buffer.get(), 0, NULL, NULL);
+                rgb_length, rgb_buffer.get(), 0, NULL, NULL);
 
         cl_program program = clCreateProgramWithSource(context, 1, 
         (const char**)&source_str, (const size_t*)&source_size, &ret);
@@ -57,16 +65,13 @@ class GpuRgbConv : public RgbConv
         checkRet(ret , 4);
 
         cl_kernel kernel = clCreateKernel(program, "rgb_conv" , &ret);
-
         checkRet(ret,9);
 
-        ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void*)&a_mem_obj);
-        ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void*)&r_mem_obj);
-
+        ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void*)&a_mem_obj);        
         checkRet(ret,5);
 
         
-        size_t global_size = (length-138)/3;
+        size_t global_size = (rgb_length-138)/3;
         size_t local_size = 32;
 
         ret = clEnqueueNDRangeKernel(cmd_queue, kernel, 1, NULL, &global_size, 
@@ -75,37 +80,20 @@ class GpuRgbConv : public RgbConv
 
         clFlush(cmd_queue);
         
-        char* t = rgb_buffer.get();
-        char* r = rgb_buffer.get();
-        std::cout << "W" << std::endl;
+        char* before = new char[rgb_length];
+        memcpy(before, rgb_buffer.get(), rgb_length);        
 
-        std::cout << "Reference : " << std::endl;
-        std::cout << std::hex << (int)r[0] << std::endl;
-        std::cout << std::hex << (int)r[1] << std::endl;
-        std::cout << std::hex << (int)r[2] << std::endl;
-        std::cout << std::endl;
-        std::cout << std::hex << (int)r[3] << std::endl;
-        std::cout << std::hex << (int)r[4] << std::endl;
-        std::cout << std::hex << (int)r[5] << std::endl;
+        ret = clEnqueueReadBuffer(cmd_queue, a_mem_obj, CL_TRUE, 0, 
+                    rgb_length, output, 0, NULL, NULL);   
+        clFlush(cmd_queue); 
+        checkRet(ret,7);
 
-        ret = clEnqueueReadBuffer(cmd_queue, r_mem_obj, CL_TRUE, 0, 
-                    length, t, 0, NULL, NULL);   
-        clFlush(cmd_queue);
-        std::cout<<"Output : "<<std::endl;                    
-        checkRet(ret,7); 
+        checkResult(before, output);
+        checkHeader(before, output);
 
-        std::cout << std::hex << (int)t[0] << std::endl;
-        std::cout << std::hex << (int)t[1] << std::endl;
-        std::cout << std::hex << (int)t[2] << std::endl;
-        std::cout << std::endl;
-        std::cout << std::hex << (int)t[3] << std::endl;
-        std::cout << std::hex << (int)t[4] << std::endl;
-        std::cout << std::hex << (int)t[5] << std::endl;
-
-    }
-
-    std::unique_ptr<char[]> convert_to_rgb() override
-    {
+        std::ofstream outStream(outputImage, std::ios::out | std::ios::binary);
+        outStream.write(output, rgb_length);
+        outStream.close();
 
     }
 
@@ -122,9 +110,35 @@ class GpuRgbConv : public RgbConv
             }
         }
 
-        bool checkResult(char* before , char* after, unsigned int length)
+        bool checkResult(char* before , char* after)
         {
+                std::cout << "rgb_start = " << rgb_start << std::endl;
+                std::cout << "rgb_length = " << rgb_length << std::endl;
+                
+                for(unsigned int i = 0; i < rgb_length; i+=3)
+                {
+                        if(before[rgb_start+i] != after[rgb_start+(i+2)])
+                        {       
+                                std::cout << "Result failed at index : " << i << std::endl;
+                                std::cout << (int)before[rgb_start+i] << " vs " << (int)after[rgb_start+(i+2)] << std::endl;
+                                std::cout << rgb_start+i << " and " << rgb_start+(i+2) << std::endl;
+                                exit(0);
+                        }
+                }
+        }
 
+        bool checkHeader(char* before, char* after)
+        {
+                for(unsigned int i = 0; i < rgb_start; i++)
+                {
+                        if(before[i] != after[i])
+                        {
+                                std::cout << "Header not the same at byte : " << i << std::endl;
+                                std::cout << "Before : " << std::ios::hex << (int)before[i] << std::endl;
+                                std::cout << "After : " << std::ios::hex << (int)after[i] << std::endl;
+                                exit(0);
+                        }
+                }
         }
 
 };

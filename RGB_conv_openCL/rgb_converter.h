@@ -8,19 +8,26 @@ class RgbConv
 
     public:
 
-        RgbConv(std::unique_ptr<char[]> arg, unsigned int length, unsigned int start) : 
-            rgb_buffer(std::move(arg)), 
-            rgb_length(length),
-            rgb_start(start)
-        {}
+        RgbConv(std::string inImage)
+        {            
+            BMP::BmpFormat bmpImage(inImage);
+            rgb_buffer = bmpImage.getByteArray();
+            rgb_start = bmpImage.ReadDataOffset();
+            rgb_length = bmpImage.ReadSize();
+            output = new char[rgb_length];
+        }
 
-        virtual std::unique_ptr<char[]> convert_to_rgb() = 0;    
-        virtual ~RgbConv() {}
+        virtual void convert_to_rgb(std::string outputImage) = 0;    
+        virtual ~RgbConv() 
+        {
+            delete output;
+        }
     
     protected:
         std::unique_ptr<char[]> rgb_buffer;
-        const unsigned int rgb_length;
-        const unsigned int rgb_start;
+        char* output;
+        unsigned int rgb_length;
+        unsigned int rgb_start;
 
 };
 
