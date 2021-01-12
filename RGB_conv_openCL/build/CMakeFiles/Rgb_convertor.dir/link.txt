@@ -1,1 +1,0 @@
-/usr/bin/g++     CMakeFiles/Rgb_convertor.dir/sources/main.cpp.o  -o Rgb_convertor  -lOpenCL 
